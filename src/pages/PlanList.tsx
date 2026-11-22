@@ -1,5 +1,6 @@
 // src/pages/PlanList.tsx
 import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import { apiClient } from '../api/axiosInstance';
 
 interface Plan {
@@ -7,13 +8,14 @@ interface Plan {
     title: string;
     planDate: string;
     isCompleted: boolean;
+    version: number; // 서버에서 마지막으로 받은 값. 토글할 때 함께 보낸다.
 }
 
 export default function PlanList() {
     const [plans, setPlans] = useState<Plan[]>([]);
     const [newTitle, setNewTitle] = useState('');
     const [error, setError] = useState('');
-    // 💡 단일 목록 접기/펴기 상태 (기본값: true/펼침)
+    // 단일 목록 접기/펴기 상태 (기본값: true/펼침)
     const [isListExpanded, setIsListExpanded] = useState(true);
 
     const fetchPlans = async () => {
@@ -48,12 +50,21 @@ export default function PlanList() {
         }
     };
 
-    const handleTogglePlan = async (id: number) => {
+    const handleTogglePlan = async (plan: Plan) => {
         try {
-            await apiClient.patch(`/api/v1/plans/${id}/toggle`);
+            await apiClient.patch(`/api/v1/plans/${plan.id}/toggle`, { version: plan.version });
             fetchPlans();
         } catch (err) {
-            setError('상태 변경에 실패했습니다.');
+            const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+            if (status === 409 || status === 404) {
+                // 다른 곳에서 먼저 바뀌었거나 지워졌다. 최신 목록을 다시 받은 뒤 안내한다.
+                await fetchPlans();
+                setError(status === 409
+                    ? '이미 바뀐 계획이라 최신 상태로 다시 불러왔어요.'
+                    : '이미 삭제된 계획이라 목록을 다시 불러왔어요.');
+            } else {
+                setError('상태 변경에 실패했습니다.');
+            }
         }
     };
 
@@ -72,7 +83,7 @@ export default function PlanList() {
             <div className="bg-white rounded-xl shadow-md p-6 sm:p-8">
                 <div className="flex justify-between items-center mb-6 border-b pb-4">
                     <h2 className="text-2xl font-bold text-gray-800">나의 계획 관리</h2>
-                    {/* 💡 토글 버튼 추가 */}
+                    {/* 토글 버튼 추가 */}
                     <button 
                         onClick={() => setIsListExpanded(!isListExpanded)}
                         className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold rounded-md transition-colors"
@@ -103,7 +114,7 @@ export default function PlanList() {
                     </button>
                 </form>
 
-                {/* 💡 isListExpanded가 true일 때만 목록 렌더링 */}
+                {/* isListExpanded가 true일 때만 목록 렌더링 */}
                 {isListExpanded && (
                     <ul className="space-y-3">
                         {plans.length === 0 ? (
@@ -126,7 +137,7 @@ export default function PlanList() {
                                     
                                     <div className="flex gap-2">
                                         <button 
-                                            onClick={() => handleTogglePlan(plan.id)}
+                                            onClick={() => handleTogglePlan(plan)}
                                             className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors whitespace-nowrap ${
                                                 plan.isCompleted 
                                                     ? 'bg-gray-200 text-gray-600 hover:bg-gray-300' 

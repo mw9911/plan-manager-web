@@ -1,11 +1,13 @@
 // src/pages/RoutineList.tsx
 import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import { apiClient } from '../api/axiosInstance';
 
 interface RoutineItem {
     id: number;
     title: string;
     isCompleted: boolean;
+    version: number; // 서버에서 마지막으로 받은 값. 토글할 때 함께 보낸다.
 }
 
 interface RoutineGroup {
@@ -22,7 +24,7 @@ export default function RoutineList() {
     const [newItemTitles, setNewItemTitles] = useState<{ [groupId: number]: string }>({});
     const [error, setError] = useState('');
     
-    // 💡 그룹별 접기/펴기 상태 관리 (groupId를 key로 가지는 객체)
+    // 그룹별 접기/펴기 상태 관리 (groupId를 key로 가지는 객체)
     // 기본적으로 값이 없으면 '펼쳐짐(true)'으로 간주합니다.
     const [expandedGroups, setExpandedGroups] = useState<{ [groupId: number]: boolean }>({});
 
@@ -71,19 +73,28 @@ export default function RoutineList() {
             setNewItemTitles({ ...newItemTitles, [groupId]: '' });
             fetchRoutines();
             
-            // 💡 항목 추가 시 해당 그룹을 강제로 펼침
+            // 항목 추가 시 해당 그룹을 강제로 펼침
             setExpandedGroups(prev => ({ ...prev, [groupId]: true }));
         } catch (err) {
             setError('루틴 항목 생성에 실패했습니다.');
         }
     };
 
-    const handleToggleItem = async (itemId: number) => {
+    const handleToggleItem = async (item: RoutineItem) => {
         try {
-            await apiClient.patch(`/api/v1/routines/items/${itemId}/toggle`);
+            await apiClient.patch(`/api/v1/routines/items/${item.id}/toggle`, { version: item.version });
             fetchRoutines();
         } catch (err) {
-            setError('항목 상태 변경에 실패했습니다.');
+            const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+            if (status === 409 || status === 404) {
+                // 다른 곳에서 먼저 바뀌었거나 지워졌다. 목록을 받으면 에러가 지워지므로, 다시 받은 뒤에 안내한다.
+                await fetchRoutines();
+                setError(status === 409
+                    ? '이미 바뀐 항목이라 최신 상태로 다시 불러왔어요.'
+                    : '이미 삭제된 항목이라 목록을 다시 불러왔어요.');
+            } else {
+                setError('항목 상태 변경에 실패했습니다.');
+            }
         }
     };
 
@@ -107,7 +118,7 @@ export default function RoutineList() {
         }
     };
 
-    // 💡 그룹 토글 핸들러
+    // 그룹 토글 핸들러
     const toggleGroupExpand = (groupId: number) => {
         setExpandedGroups(prev => ({
             ...prev,
@@ -160,7 +171,7 @@ export default function RoutineList() {
                     </p>
                 ) : (
                     groups.map((group) => {
-                        // 💡 현재 그룹이 펼쳐져 있는지 확인 (기본값 true)
+                        // 현재 그룹이 펼쳐져 있는지 확인 (기본값 true)
                         const isExpanded = expandedGroups[group.id] ?? true;
 
                         return (
@@ -171,7 +182,7 @@ export default function RoutineList() {
                                         className="flex items-center gap-2 cursor-pointer select-none"
                                         onClick={() => toggleGroupExpand(group.id)}
                                     >
-                                        {/* 💡 토글 아이콘 추가 및 클릭 영역 확장 */}
+                                        {/* 토글 아이콘 추가 및 클릭 영역 확장 */}
                                         <span className="text-indigo-600 font-bold w-5 text-center">
                                             {isExpanded ? '▼' : '▶'}
                                         </span>
@@ -190,7 +201,7 @@ export default function RoutineList() {
                                     </button>
                                 </div>
                                 
-                                {/* 💡 isExpanded가 true일 때만 하위 항목 렌더링 */}
+                                {/* isExpanded가 true일 때만 하위 항목 렌더링 */}
                                 {isExpanded && (
                                     <div className="p-5">
                                         <ul className="space-y-2 mb-4">
@@ -204,7 +215,7 @@ export default function RoutineList() {
                                                     
                                                     <div className="flex gap-2">
                                                         <button 
-                                                            onClick={() => handleToggleItem(item.id)}
+                                                            onClick={() => handleToggleItem(item)}
                                                             className={`px-3 py-1.5 rounded-md text-sm font-bold transition-colors whitespace-nowrap ${
                                                                 item.isCompleted 
                                                                     ? 'bg-gray-200 text-gray-600 hover:bg-gray-300' 

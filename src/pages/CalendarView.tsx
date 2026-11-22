@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css'; // 달력 기본 스타일
 import { apiClient } from '../api/axiosInstance';
+import { toLocalDateString } from '../utils/date';
 
-// 백엔드 명세에 맞춘 DTO 인터페이스[cite: 18]
+// 캘린더 조회 API(/api/v1/calendar) 응답 형식
 interface CalendarItem {
     id: number;
     type: 'PLAN' | 'ROUTINE';
@@ -23,12 +24,11 @@ export default function CalendarView() {
         try {
             const year = targetDate.getFullYear();
             const month = targetDate.getMonth();
-            
-            // 💡 해당 월의 1일과 마지막 일자 계산
-            const startDate = new Date(year, month, 1).toISOString().split('T')[0];
-            const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
 
-            // 💡 백엔드 명세에 맞춘 GET 요청 파라미터 전송[cite: 19]
+            // 해당 월의 1일과 말일을 로컬 날짜 기준으로 계산
+            const startDate = toLocalDateString(new Date(year, month, 1));
+            const endDate = toLocalDateString(new Date(year, month + 1, 0));
+
             const response = await apiClient.get('/api/v1/calendar', {
                 params: { startDate, endDate }
             });
@@ -55,8 +55,8 @@ export default function CalendarView() {
     const renderTileContent = ({ date, view }: { date: Date, view: string }) => {
         if (view !== 'month') return null; // 월간 뷰에서만 렌더링
 
-        // 현재 타일의 날짜를 YYYY-MM-DD 포맷으로 변환하여 매칭
-        const dateString = date.toLocaleDateString('sv-SE'); // sv-SE 팩토리얼(YYYY-MM-DD)
+        // 타일 날짜를 YYYY-MM-DD로 변환해 일정 날짜와 비교
+        const dateString = toLocalDateString(date);
         const dayItems = items.filter(item => item.targetDate === dateString);
 
         if (dayItems.length === 0) return null;
@@ -64,8 +64,8 @@ export default function CalendarView() {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px', fontSize: '10px' }}>
                 {dayItems.map(item => (
-                    <div 
-                        key={`${item.type}-${item.id}`} 
+                    <div
+                        key={`${item.type}-${item.id}`}
                         style={{
                             padding: '2px 4px',
                             borderRadius: '4px',
@@ -74,7 +74,7 @@ export default function CalendarView() {
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
-                            // 💡 PLAN은 파란색, ROUTINE은 보라색 계열로 타입별 색상 구분[cite: 18]
+                            // PLAN은 파란색, ROUTINE은 보라색 계열 (완료하면 옅은 색)
                             backgroundColor: item.type === 'PLAN' ? (item.isCompleted ? '#a0c4ff' : '#007bff') : (item.isCompleted ? '#dcb6ff' : '#6f42c1'),
                             textDecoration: item.isCompleted ? 'line-through' : 'none'
                         }}
@@ -90,9 +90,9 @@ export default function CalendarView() {
         <div style={{ maxWidth: '800px', margin: '50px auto', padding: '20px', fontFamily: 'sans-serif' }}>
             <h2>나의 캘린더</h2>
             {error && <p style={{ color: 'red', fontWeight: 'bold' }}>{error}</p>}
-            
+
             <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
-                <Calendar 
+                <Calendar
                     onChange={(newDate) => setDate(newDate as Date)}
                     value={date}
                     onActiveStartDateChange={handleActiveStartDateChange}
@@ -100,7 +100,7 @@ export default function CalendarView() {
                     className="custom-calendar" // 별도 CSS 커스텀을 위한 클래스
                 />
             </div>
-            
+
             {/* 범례(Legend) 표시 */}
             <div style={{ marginTop: '20px', display: 'flex', gap: '15px', justifyContent: 'center', fontSize: '14px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
